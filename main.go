@@ -17,8 +17,9 @@ var Host = BackupCommand.String("host", "localhost", "database host")
 var Port = BackupCommand.Int("port", 3306, "database port")
 var Username = BackupCommand.String("username", "mariabackup", "database username")
 var Password = BackupCommand.String("password", "", "database password")
-var TargetDir = flag.String("target_dir", "/backup/mariabackup", "directory in which the backups will be placed")
-var DataDir = flag.String("datadir", "/var/lib/mysql", "directory where the MySQL data is stored")
+var Type = BackupCommand.String("type", "full", "backup type")
+var TargetDir = BackupCommand.String("target_dir", "/backup/mariabackup", "directory in which the backups will be placed")
+var DataDir = BackupCommand.String("datadir", "/var/lib/mysql", "directory where the MySQL data is stored")
 
 func main() {
 
@@ -40,22 +41,33 @@ func main() {
 
 func backup(target string) (error) {
 
-	createDir(*TargetDir)
+	var backupPath string
+	var backupCmd *exec.Cmd
+	var backupPos string
 
-	cmd := exec.Command("mariabackup",
-		"--host="+*Host,
-		"--port="+strconv.Itoa(*Port),
-	        "--user="+*Username,
-		"--password="+*Password,
-	        "--backup",
-		"--version-check",
-		"--datadir="+*DataDir,
-		"--target_dir="+*TargetDir,
-		"--extra-lsndir="+*TargetDir,
-		"--stream=xbstream",
-	)
+	if *Type == "full" {
+		os.RemoveAll(*TargetDir)
+		backupPath = filepath.Join(*TargetDir, "full")
+		os.MkdirAll(backupPath, 750)
+		backupCmd = exec.Command("mariabackup",
+			"--host="+*Host,
+			"--port="+strconv.Itoa(*Port),
+			"--user="+*Username,
+			"--password="+*Password,
+			"--backup",
+			"--version-check",
+			"--datadir="+*DataDir,
+			"--target_dir="+backupPath,
+			"--extra-lsndir="+backupPath,
+			"--stream=xbstream",
+		)
+		backupPos = "0"
+	} else if *Type == "incr" {
+		backupPath = filepath.Join(*TargetDir, "incr/1")
+		os.MkdirAll(backupPath, 750)
+	}
 
-	target = filepath.Join(target, fmt.Sprintf("backup.gz"))
+	target = filepath.Join(backupPath, fmt.Sprintf("backup.gz"))
 	file, err := os.Create(target)
 	logError(err)
 	defer file.Close()
@@ -63,20 +75,24 @@ func backup(target string) (error) {
 	gzw := gzip.NewWriter(file)
 	defer gzw.Close()
 
-	out, err := cmd.StdoutPipe()
-	cmd.Stderr = os.Stderr
+	out, err := backupCmd.StdoutPipe()
+	backupCmd.Stderr = os.Stderr
 	logError(err)
-	cmd.Start()
+	backupCmd.Start()
 
 	io.Copy(gzw, out)
+	saveBackupPos(backupPos)
 	return nil
 }
 
-func createDir(dir string) {
-	if _, err := os.Stat(dir); os.IsNotExist(err) {
-		err = os.Mkdir(dir, 0750)
-		logError(err)
-	}
+func saveBackupPos(state string) {
+    f, err := os.Create(filepath.Join(*TargetDir, "mariabackup.pos"))
+    logError(err)
+    l, err := f.WriteString(state)
+    logError(err)
+    fmt.Println(l, "bytes written successfully")
+    err = f.Close()
+    logError(err)
 }
 
 func logError(e error) {
