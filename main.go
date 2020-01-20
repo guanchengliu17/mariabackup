@@ -1,16 +1,17 @@
 package main
 
 import (
-    "io"
-    "os"
-    "os/exec"
-    "compress/gzip"
-    "fmt"
-    "path/filepath"
-    "flag"
-    "strconv"
-    "log"
-    "io/ioutil"
+	"compress/gzip"
+	"errors"
+	"flag"
+	"fmt"
+	"io"
+	"io/ioutil"
+	"log"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strconv"
 )
 
 var BackupCommand = flag.NewFlagSet("backup", flag.ExitOnError)
@@ -24,33 +25,58 @@ var DataDir = BackupCommand.String("datadir", "/var/lib/mysql", "directory where
 
 func main() {
 
-	switch os.Args[1] {
-	case "backup":
-		BackupCommand.Parse(os.Args[2:])
-	default:
-		fmt.Printf("%q is not valid command.\n", os.Args[1])
-		os.Exit(2)
+	log.SetFlags(log.Ldate | log.Ltime)
+
+	if len(os.Args) < 2 {
+		log.Println("Invalid number of arguments. Usage: backup <command>")
+		return
 	}
 
-	if BackupCommand.Parsed() {
-		fmt.Println("Backup data directory:", *DataDir)
-		fmt.Println("Backup target directory:", *TargetDir)
-		backup(*TargetDir)
+	switch os.Args[1] {
+	case "backup":
+		err := BackupCommand.Parse(os.Args)
+
+		if err != nil {
+			log.Println("Parsing backup commands failed:", err)
+			return
+		}
+	default:
+		fmt.Printf("%q is not valid command.\n", os.Args[1])
+		return
+	}
+
+	log.Println("Backup data directory:", *DataDir)
+	log.Println("Backup target directory:", *TargetDir)
+
+	err := backup(*TargetDir)
+
+	if err != nil {
+		log.Println("Backup aborted:", err)
 	}
 
 }
 
-func backup(target string) (error) {
+func backup(target string) error {
 
-	var backupPath string
-	var backupCmd *exec.Cmd
-	var backupPos string
-	var incrementalBaseDir string
+	backupPath := ""
+	backupCmd := &exec.Cmd{}
+	backupPos := 0
+	incrementalBaseDir := ""
 
 	if *Type == "full" {
-		os.RemoveAll(*TargetDir)
+		err := os.RemoveAll(*TargetDir)
+
+		if err != nil {
+			return errors.New(fmt.Sprintf("[Full backup]> Failed to remove targetDir, %v", err))
+		}
+
 		backupPath = filepath.Join(*TargetDir, "full")
-		os.MkdirAll(backupPath, 750)
+		err = os.MkdirAll(backupPath, 750)
+
+		if err != nil {
+			return errors.New(fmt.Sprintf("[Full backup]> Making directories failed, %v", err))
+		}
+
 		backupCmd = exec.Command("mariabackup",
 			"--host="+*Host,
 			"--port="+strconv.Itoa(*Port),
@@ -63,33 +89,43 @@ func backup(target string) (error) {
 			"--extra-lsndir="+backupPath,
 			"--stream=xbstream",
 		)
-		backupPos = "0"
+		backupPos = 0
 	} else if *Type == "incr" {
 
-		file, err := ioutil.ReadFile(filepath.Join(*TargetDir, "mariabackup.pos"))
-		logError(err)
-		pos, err := strconv.Atoi(string(file))
-		if pos == 0 {
+		data, err := ioutil.ReadFile(filepath.Join(*TargetDir, "mariabackup.pos"))
+
+		if err != nil {
+			return errors.New(fmt.Sprintf("[Incremental backup]> Failed to read backup position file, %v", err))
+		}
+
+		loadedPosition, err := strconv.Atoi(string(data))
+
+		if loadedPosition == 0 {
 			incrementalBaseDir = filepath.Join(*TargetDir, "full")
 		} else {
-			incrementalBaseDir = filepath.Join(*TargetDir, "incr", strconv.Itoa(pos))
+			incrementalBaseDir = filepath.Join(*TargetDir, "incr", strconv.Itoa(loadedPosition))
 		}
-		pos = pos + 1
-		backupPos = strconv.Itoa(pos)
-		backupPath = filepath.Join(*TargetDir, "incr/", backupPos)
-		os.MkdirAll(backupPath, 750)
+
+		backupPos = loadedPosition + 1
+		backupPath = filepath.Join(*TargetDir, "incr/", strconv.Itoa(backupPos))
+		err = os.MkdirAll(backupPath, 750)
+
+		if err != nil {
+			return errors.New(fmt.Sprintf("[Incremental backup]> Making directories failed, %v", err))
+		}
+
 		backupCmd = exec.Command("mariabackup",
 			"--host="+*Host,
-                        "--port="+strconv.Itoa(*Port),
-                        "--user="+*Username,
-                        "--password="+*Password,
-                        "--backup",
-                        "--version-check",
-                        "--datadir="+*DataDir,
-                        "--target_dir="+backupPath,
+			"--port="+strconv.Itoa(*Port),
+			"--user="+*Username,
+			"--password="+*Password,
+			"--backup",
+			"--version-check",
+			"--datadir="+*DataDir,
+			"--target_dir="+backupPath,
 			"--incremental-basedir="+incrementalBaseDir,
-                        "--extra-lsndir="+backupPath,
-                        "--stream=xbstream",
+			"--extra-lsndir="+backupPath,
+			"--stream=xbstream",
 		)
 
 	}
@@ -97,7 +133,11 @@ func backup(target string) (error) {
 	fmt.Println(backupCmd)
 	target = filepath.Join(backupPath, fmt.Sprintf("backup.gz"))
 	file, err := os.Create(target)
-	logError(err)
+
+	if err != nil {
+		return err
+	}
+
 	defer file.Close()
 
 	gzw := gzip.NewWriter(file)
@@ -105,26 +145,43 @@ func backup(target string) (error) {
 
 	out, err := backupCmd.StdoutPipe()
 	backupCmd.Stderr = os.Stderr
-	logError(err)
-	backupCmd.Start()
-
-	io.Copy(gzw, out)
-	saveBackupPos(backupPos)
-	return nil
-}
-
-func saveBackupPos(state string) {
-    f, err := os.Create(filepath.Join(*TargetDir, "mariabackup.pos"))
-    logError(err)
-    l, err := f.WriteString(state)
-    logError(err)
-    fmt.Println(l, "bytes written successfully")
-    err = f.Close()
-    logError(err)
-}
-
-func logError(e error) {
-	if e != nil {
-		log.Fatal(e)
+	if err != nil {
+		return err
 	}
+
+	err = backupCmd.Start()
+
+	if err != nil {
+		return errors.New(fmt.Sprintf("[Backup]> Failed executing command: %v", err))
+	}
+
+	_, err = io.Copy(gzw, out)
+
+	if err != nil {
+		return err
+	}
+
+	return saveBackupPos(backupPos)
+}
+
+func saveBackupPos(position int) error {
+	f, err := os.Create(filepath.Join(*TargetDir, "mariabackup.pos"))
+
+	if err != nil {
+		return err
+	}
+
+	_, err = f.WriteString(strconv.Itoa(position))
+
+	if err != nil {
+		return err
+	}
+
+	err = f.Close()
+
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
