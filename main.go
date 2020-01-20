@@ -10,6 +10,7 @@ import (
     "flag"
     "strconv"
     "log"
+    "io/ioutil"
 )
 
 var BackupCommand = flag.NewFlagSet("backup", flag.ExitOnError)
@@ -44,6 +45,7 @@ func backup(target string) (error) {
 	var backupPath string
 	var backupCmd *exec.Cmd
 	var backupPos string
+	var incrementalBaseDir string
 
 	if *Type == "full" {
 		os.RemoveAll(*TargetDir)
@@ -63,10 +65,36 @@ func backup(target string) (error) {
 		)
 		backupPos = "0"
 	} else if *Type == "incr" {
-		backupPath = filepath.Join(*TargetDir, "incr/1")
+
+		file, err := ioutil.ReadFile(filepath.Join(*TargetDir, "mariabackup.pos"))
+		logError(err)
+		pos, err := strconv.Atoi(string(file))
+		if pos == 0 {
+			incrementalBaseDir = filepath.Join(*TargetDir, "full")
+		} else {
+			incrementalBaseDir = filepath.Join(*TargetDir, "incr", strconv.Itoa(pos))
+		}
+		pos = pos + 1
+		backupPos = strconv.Itoa(pos)
+		backupPath = filepath.Join(*TargetDir, "incr/", backupPos)
 		os.MkdirAll(backupPath, 750)
+		backupCmd = exec.Command("mariabackup",
+			"--host="+*Host,
+                        "--port="+strconv.Itoa(*Port),
+                        "--user="+*Username,
+                        "--password="+*Password,
+                        "--backup",
+                        "--version-check",
+                        "--datadir="+*DataDir,
+                        "--target_dir="+backupPath,
+			"--incremental-basedir="+incrementalBaseDir,
+                        "--extra-lsndir="+backupPath,
+                        "--stream=xbstream",
+		)
+
 	}
 
+	fmt.Println(backupCmd)
 	target = filepath.Join(backupPath, fmt.Sprintf("backup.gz"))
 	file, err := os.Create(target)
 	logError(err)
