@@ -83,18 +83,18 @@ func main() {
 		restore, err := Manager.CreateRestoreManager(*RestoreSourceDir, *RestoreTargetDir)
 
 		if err != nil {
-                        log.Printf("Failed to initialize restore")
-                        return
-                }
+			log.Printf("Failed to initialize restore")
+			return
+		}
 
-                err = restore.Restore()
+		err = restore.Restore()
 
-                if err != nil {
-                        log.Println("Restore has failed:", err)
-                        return
-                }
+		if err != nil {
+			log.Println("Restore has failed:", err)
+			return
+		}
 
-                log.Printf("Restore successfully finished")
+		log.Printf("Restore successfully finished")
 
 	default:
 		fmt.Printf("%q is not valid command\n", os.Args[1])

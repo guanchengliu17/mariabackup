@@ -135,7 +135,12 @@ func (b *BackupManager) executeCommandAndSaveOutput(backupPath string, command *
 
 	defer file.Close()
 
-	gzw := gzip.NewWriter(file)
+	gzw, err := gzip.NewWriterLevel(file, gzip.BestSpeed)
+
+	if err != nil {
+		return errors.New("Failed to create gzip writer:" + err.Error())
+	}
+
 	defer gzw.Close()
 
 	out, err := command.StdoutPipe()
