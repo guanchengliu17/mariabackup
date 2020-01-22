@@ -7,6 +7,7 @@ import (
         "io"
         "os"
         "os/exec"
+	"os/user"
         "path/filepath"
 	"strconv"
 	"io/ioutil"
@@ -30,11 +31,21 @@ func CreateRestoreManager(
 }
 
 func (b *RestoreManager) Restore() error {
-	log.SetFlags(log.Ldate | log.Ltime)
-
-	err := os.RemoveAll(filepath.Join(b.sourceDirectory, "restore"))
+	f, err := os.Open(b.targetDirectory)
 	if err != nil {
-		return errors.New(fmt.Sprintf("[Restore backup]> Failed to remove previous backup restore directory, %v", err))
+		return err
+	}
+	defer f.Close()
+
+	_, err = f.Readdir(1)
+
+	if err != io.EOF {
+		return errors.New(fmt.Sprintf("[Restore backup]> Target directory %v is not empty", b.targetDirectory))
+	}
+
+	err = os.RemoveAll(filepath.Join(b.sourceDirectory, "restore"))
+        if err != nil {
+                return errors.New(fmt.Sprintf("[Restore backup]> Failed to remove previous backup restore directory, %v", err))
         }
 
 	backupSubDirectory := ""
@@ -54,14 +65,28 @@ func (b *RestoreManager) Restore() error {
 		if err != nil {
 			return err
 		}
+
+		log.Println("Preparing", filepath.Join(b.sourceDirectory, "restore", backupSubDirectory))
+                err = b.prepareBackup(backupSubDirectory)
+
+                if err != nil {
+                        return err
+                }
 	}
+
+	err = b.moveBackupToTargetDirectory()
+
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
 func (b *RestoreManager) decompressBackup(backupSubDirectory string) error {
-	backupRestoreTemporaryDirectory := filepath.Join(b.sourceDirectory, "restore", backupSubDirectory)
+	workDirectory := filepath.Join(b.sourceDirectory, "restore", backupSubDirectory)
 
-	err := os.MkdirAll(backupRestoreTemporaryDirectory, 750)
+	err := os.MkdirAll(workDirectory, 750)
 
 	if err != nil {
 		return errors.New(fmt.Sprintf("[RestoreManager]> Making directories failed, %v", err))
@@ -83,7 +108,7 @@ func (b *RestoreManager) decompressBackup(backupSubDirectory string) error {
 
         defer gzr.Close()
 
-        command := exec.Command("mbstream", "-x", "-C", backupRestoreTemporaryDirectory)
+        command := exec.Command("mbstream", "-x", "-C", workDirectory)
 
         out, err := command.StdinPipe()
         command.Stderr = os.Stderr
@@ -94,7 +119,7 @@ func (b *RestoreManager) decompressBackup(backupSubDirectory string) error {
         err = command.Start()
 
         if err != nil {
-                return errors.New(fmt.Sprintf("[RestoreManager Restore()]> Failed executing command: %v", err))
+                return errors.New(fmt.Sprintf("[RestoreManager Restore()]> Failed executing mbstream command: %v", err))
         }
 
         _, err = io.Copy(out, gzr)
@@ -104,6 +129,86 @@ func (b *RestoreManager) decompressBackup(backupSubDirectory string) error {
         }
 
 	return nil
+}
+
+func (b *RestoreManager) prepareBackup(backupSubDirectory string) error {
+	command := exec.Command("mariabackup",
+		"--prepare",
+		"--target-dir="+filepath.Join(b.sourceDirectory, "restore/full"),
+	)
+
+	if backupSubDirectory != "full" {
+		command.Args = append(command.Args, "--incremental-basedir="+filepath.Join(b.sourceDirectory, "restore", backupSubDirectory))
+	}
+
+	command.Stderr = os.Stderr
+	command.Stdout = os.Stdout
+	err := command.Start()
+
+	if err != nil {
+                return errors.New(fmt.Sprintf("[RestoreManager Restore()]> Failed executing mariabackup --prepare command: %v", err))
+        }
+
+	err = command.Wait()
+
+        if err != nil {
+                return err
+        }
+
+        //check if the exit code was 0
+        exitCode := command.ProcessState.ExitCode()
+
+        if exitCode != 0 {
+                return errors.New("Failed to prepare backup, exit code:" + strconv.Itoa(exitCode))
+        }
+
+	return nil
+}
+
+func (b *RestoreManager) moveBackupToTargetDirectory() error {
+        command := exec.Command("mariabackup",
+                "--move-back",
+                "--target-dir="+filepath.Join(b.sourceDirectory, "restore/full"),
+        )
+
+        command.Stderr = os.Stderr
+        command.Stdout = os.Stdout
+        err := command.Start()
+
+        if err != nil {
+                return errors.New(fmt.Sprintf("[RestoreManager Restore()]> Failed executing mariabackup --move-back command: %v", err))
+        }
+
+        err = command.Wait()
+
+        if err != nil {
+                return err
+        }
+
+        //check if the exit code was 0
+        exitCode := command.ProcessState.ExitCode()
+
+        if exitCode != 0 {
+                return errors.New("Failed to move backup to target directory, exit code:" + strconv.Itoa(exitCode))
+        }
+
+	group, err := user.Lookup("mysql")
+
+	if err != nil {
+		return err
+	}
+
+	uid, _ := strconv.Atoi(group.Uid)
+	gid, _ := strconv.Atoi(group.Gid)
+
+	err = filepath.Walk(b.targetDirectory, func(name string, f os.FileInfo, err error) error {
+		if err == nil {
+			err = os.Chown(name, uid, gid)
+		}
+		return err
+	})
+
+        return nil
 }
 
 func (b *RestoreManager) getBackupPosition() (int, error) {
