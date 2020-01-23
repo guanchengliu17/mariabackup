@@ -22,12 +22,12 @@ $ go build -o mariabackup-wrapper
 
 Full backup:
 ```
-$ ./mariabackup-wrapper backup -username=root -type=full 
+$ ./mariabackup-wrapper backup -username=root -mode=full 
 ```
 
 Incremental backup:
 ```
-$ ./mariabackup-wrapper backup -username=root -type=incremental
+$ ./mariabackup-wrapper backup -username=root -mode=incremental
 ```
 
 Restore backup:

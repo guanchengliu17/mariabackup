@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"gitlab.com/scoro/infrastructure/mariabackup/Manager"
@@ -8,24 +9,43 @@ import (
 	"os"
 )
 
-//backup command
-var BackupCommand = flag.NewFlagSet("backup", flag.ExitOnError)
-var BackupHost = BackupCommand.String("host", "localhost", "database host")
-var BackupPort = BackupCommand.Int("port", 3306, "database port")
-var BackupUsername = BackupCommand.String("username", "mariabackup", "database username")
-var BackupPassword = BackupCommand.String("password", "", "database password")
-var BackupType = BackupCommand.String("type", "full", "backup type - full|incremental")
-var BackupTargetDir = BackupCommand.String("target-dir", "/backup/mariabackup", "directory in which the backups will be placed")
-var BackupDataDir = BackupCommand.String("datadir", "/var/lib/mysql", "directory where the MySQL data is stored")
-
-//restore command
-var RestoreCommand = flag.NewFlagSet("restore", flag.ExitOnError)
-var RestoreSourceDir = RestoreCommand.String("source-dir", "/backup/mariabackup", "directory in which the backups are stored")
-var RestoreTargetDir = RestoreCommand.String("target-dir", "/var/lib/mysql", "directory where the MySQL data is stored")
-
 func main() {
 
 	log.SetFlags(log.Ldate | log.Ltime)
+
+	type ConfigManager Manager.ConfigManager
+
+	var config ConfigManager
+	configData, err := Manager.LoadConfiguration()
+
+	if err != nil {
+		log.Println("Configuration loading failed:", err)
+		return
+	}
+
+	err = json.Unmarshal([]byte(configData), &config)
+
+	if err != nil {
+		log.Println("Configuration parsing failed:", err)
+		return
+	}
+
+	MariabackupBinary := flag.String("mariabackup-binary", config.MariabackupBinary, "mariabackup binary")
+
+	//backup command
+	BackupCommand := flag.NewFlagSet("backup", flag.ExitOnError)
+	BackupCommandHost := BackupCommand.String("host", config.Backup.MySQLHost, "database host")
+	BackupCommandPort := BackupCommand.Int("port", config.Backup.MySQLPort, "database port")
+	BackupCommandUsername := BackupCommand.String("username", config.Backup.MySQLUsername, "database username")
+	BackupCommandPassword := BackupCommand.String("password", config.Backup.MySQLPassword, "database password")
+	BackupCommandMode := BackupCommand.String("mode", config.Backup.Mode, "backup mode - full|incremental")
+	BackupCommandTargetDirectory := BackupCommand.String("target-dir", config.Backup.TargetDirectory, "directory in which the backups will be placed")
+	BackupCommandDataDirectory := BackupCommand.String("datadir", config.Backup.MySQLDataDirectory, "directory where the MySQL data is stored")
+
+	//restore command
+	RestoreCommand := flag.NewFlagSet("restore", flag.ExitOnError)
+	RestoreCommandSourceDirectory := RestoreCommand.String("source-dir", config.Restore.SourceDirectory, "directory in which the backups are stored")
+	RestoreCommandTargetDirectory := RestoreCommand.String("target-dir", config.Restore.TargetDirectory, "directory where the MySQL data is stored")
 
 	if len(os.Args) < 2 {
 		log.Println("Invalid number of arguments. Usage: ./<binary> <command>")
@@ -42,17 +62,18 @@ func main() {
 		}
 		//do backup
 
-		log.Println("Backup data directory:", *BackupDataDir)
-		log.Println("Backup target directory:", *BackupTargetDir)
+		log.Println("Backup data directory:", *BackupCommandDataDirectory)
+		log.Println("Backup target directory:", *BackupCommandTargetDirectory)
+		log.Println("Mariabackup binary:", *MariabackupBinary)
 
 		backup, err := Manager.CreateBackupManager(
-			*BackupTargetDir,
-			*BackupHost,
-			*BackupPort,
-			*BackupUsername,
-			*BackupPassword,
-			*BackupType,
-			*BackupDataDir,
+			*BackupCommandTargetDirectory,
+			*BackupCommandHost,
+			*BackupCommandPort,
+			*BackupCommandUsername,
+			*BackupCommandPassword,
+			*BackupCommandMode,
+			*BackupCommandDataDirectory,
 		)
 
 		if err != nil {
@@ -77,10 +98,10 @@ func main() {
 		}
 		//do restore
 
-		log.Println("Restore source directory:", *RestoreSourceDir)
-		log.Println("Restore target directory:", *RestoreTargetDir)
+		log.Println("Restore source directory:", *RestoreCommandSourceDirectory)
+		log.Println("Restore target directory:", *RestoreCommandTargetDirectory)
 
-		restore, err := Manager.CreateRestoreManager(*RestoreSourceDir, *RestoreTargetDir)
+		restore, err := Manager.CreateRestoreManager(*RestoreCommandSourceDirectory, *RestoreCommandTargetDirectory)
 
 		if err != nil {
 			log.Printf("Failed to initialize restore")
