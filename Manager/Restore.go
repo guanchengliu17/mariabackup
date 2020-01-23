@@ -1,9 +1,9 @@
 package Manager
 
 import (
-	"compress/gzip"
 	"errors"
 	"fmt"
+	gzip "github.com/klauspost/pgzip"
 	"io"
 	"io/ioutil"
 	"log"
@@ -100,7 +100,7 @@ func (b *RestoreManager) decompressBackup(backupSubDirectory string) error {
 
 	defer f.Close()
 
-	gzr, err := gzip.NewReader(f)
+	gzr, err := gzip.NewReader(f) //todo: implement NewReaderN logic to use multiple blocks and custom buffer size for decompressing
 
 	if err != nil {
 		return err

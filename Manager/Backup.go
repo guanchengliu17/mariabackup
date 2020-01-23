@@ -1,9 +1,9 @@
 package Manager
 
 import (
-	"compress/gzip"
 	"errors"
 	"fmt"
+	gzip "github.com/klauspost/pgzip"
 	"io"
 	"io/ioutil"
 	"os"
@@ -109,6 +109,7 @@ func (b *BackupManager) Backup() error {
 		"--datadir="+b.dataDirectory,
 		"--target_dir="+backupPath,
 		"--extra-lsndir="+backupPath,
+		"--parallel=4",
 		"--stream=xbstream",
 	)
 
@@ -136,6 +137,8 @@ func (b *BackupManager) executeCommandAndSaveOutput(backupPath string, command *
 	defer file.Close()
 
 	gzw, err := gzip.NewWriterLevel(file, gzip.BestSpeed)
+
+	gzw.SetConcurrency(2048<<10, 16) //todo: implement config, handle errors
 
 	if err != nil {
 		return errors.New("Failed to create gzip writer:" + err.Error())
