@@ -30,22 +30,26 @@ func main() {
 		return
 	}
 
-	MariabackupBinary := flag.String("mariabackup-binary", config.MariabackupBinary, "mariabackup binary")
-
 	//backup command
 	BackupCommand := flag.NewFlagSet("backup", flag.ExitOnError)
-	BackupCommandHost := BackupCommand.String("host", config.Backup.MySQLHost, "database host")
-	BackupCommandPort := BackupCommand.Int("port", config.Backup.MySQLPort, "database port")
-	BackupCommandUsername := BackupCommand.String("username", config.Backup.MySQLUsername, "database username")
-	BackupCommandPassword := BackupCommand.String("password", config.Backup.MySQLPassword, "database password")
+	BackupCommandMySQLHost := BackupCommand.String("host", config.Backup.MySQLHost, "database host")
+	BackupCommandMySQLPort := BackupCommand.Int("port", config.Backup.MySQLPort, "database port")
+	BackupCommandMySQLUsername := BackupCommand.String("username", config.Backup.MySQLUsername, "database username")
+	BackupCommandMySQLPassword := BackupCommand.String("password", config.Backup.MySQLPassword, "database password")
 	BackupCommandMode := BackupCommand.String("mode", config.Backup.Mode, "backup mode - full|incremental")
 	BackupCommandTargetDirectory := BackupCommand.String("target-dir", config.Backup.TargetDirectory, "directory in which the backups will be placed")
-	BackupCommandDataDirectory := BackupCommand.String("datadir", config.Backup.MySQLDataDirectory, "directory where the MySQL data is stored")
+	BackupCommandMySQLDataDirectory := BackupCommand.String("datadir", config.Backup.MySQLDataDirectory, "directory where the MySQL data is stored")
+	BackupCommandMariabackupBinary := BackupCommand.String("mariabackup-binary", config.MariabackupBinary, "mariabackup binary")
+	BackupCommandPositionFile := BackupCommand.String("backup-position-file", config.PositionFile, "file where backup position is stored")
 
 	//restore command
 	RestoreCommand := flag.NewFlagSet("restore", flag.ExitOnError)
 	RestoreCommandSourceDirectory := RestoreCommand.String("source-dir", config.Restore.SourceDirectory, "directory in which the backups are stored")
 	RestoreCommandTargetDirectory := RestoreCommand.String("target-dir", config.Restore.TargetDirectory, "directory where the MySQL data is stored")
+	RestoreCommandWorkDirectory := RestoreCommand.String("work-dir", config.Restore.WorkDirectory, "directory where temporary data is stored during restore process")
+	RestoreCommandMariabackupBinary := RestoreCommand.String("mariabackup-binary", config.MariabackupBinary, "mariabackup binary")
+	RestoreCommandPositionFile := RestoreCommand.String("backup-position-file", config.PositionFile, "file where backup position is stored")
+	RestoreCommandMbstreamBinary := RestoreCommand.String("mbstream-binary", config.MbstreamBinary, "mbstream binary")
 
 	if len(os.Args) < 2 {
 		log.Println("Invalid number of arguments. Usage: ./<binary> <command>")
@@ -62,18 +66,21 @@ func main() {
 		}
 		//do backup
 
-		log.Println("Backup data directory:", *BackupCommandDataDirectory)
+		log.Println("Backup data directory:", *BackupCommandMySQLDataDirectory)
 		log.Println("Backup target directory:", *BackupCommandTargetDirectory)
-		log.Println("Mariabackup binary:", *MariabackupBinary)
+		log.Println("Mariabackup binary:", *BackupCommandMariabackupBinary)
+		log.Println("Backup position file:", *BackupCommandPositionFile)
 
 		backup, err := Manager.CreateBackupManager(
 			*BackupCommandTargetDirectory,
-			*BackupCommandHost,
-			*BackupCommandPort,
-			*BackupCommandUsername,
-			*BackupCommandPassword,
+			*BackupCommandMySQLHost,
+			*BackupCommandMySQLPort,
+			*BackupCommandMySQLUsername,
+			*BackupCommandMySQLPassword,
 			*BackupCommandMode,
-			*BackupCommandDataDirectory,
+			*BackupCommandMySQLDataDirectory,
+			*BackupCommandMariabackupBinary,
+			*BackupCommandPositionFile,
 		)
 
 		if err != nil {
@@ -101,7 +108,14 @@ func main() {
 		log.Println("Restore source directory:", *RestoreCommandSourceDirectory)
 		log.Println("Restore target directory:", *RestoreCommandTargetDirectory)
 
-		restore, err := Manager.CreateRestoreManager(*RestoreCommandSourceDirectory, *RestoreCommandTargetDirectory)
+		restore, err := Manager.CreateRestoreManager(
+			*RestoreCommandSourceDirectory,
+			*RestoreCommandTargetDirectory,
+			*RestoreCommandWorkDirectory,
+			*RestoreCommandMariabackupBinary,
+			*RestoreCommandPositionFile,
+			*RestoreCommandMbstreamBinary,
+		)
 
 		if err != nil {
 			log.Printf("Failed to initialize restore")

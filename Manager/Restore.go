@@ -15,17 +15,29 @@ import (
 )
 
 type RestoreManager struct {
-	sourceDirectory string
-	targetDirectory string
+	sourceDirectory    string
+	targetDirectory    string
+	workDirectory      string
+	mariabackupBinary  string
+	backupPositionFile string
+	mbstreamBinary     string
 }
 
 func CreateRestoreManager(
 	SourceDirectory string,
-	TargetDirectory string) (*RestoreManager, error) {
+	TargetDirectory string,
+	WorkDirectory string,
+	MariabackupBinary string,
+	BackupPositionFile string,
+	MbstreamBinary string) (*RestoreManager, error) {
 
 	return &RestoreManager{
-		sourceDirectory: SourceDirectory,
-		targetDirectory: TargetDirectory,
+		sourceDirectory:    SourceDirectory,
+		targetDirectory:    TargetDirectory,
+		workDirectory:      WorkDirectory,
+		mariabackupBinary:  MariabackupBinary,
+		backupPositionFile: BackupPositionFile,
+		mbstreamBinary:     MbstreamBinary,
 	}, nil
 
 }
@@ -43,7 +55,7 @@ func (b *RestoreManager) Restore() error {
 		return errors.New(fmt.Sprintf("[Restore backup]> Target directory %v is not empty", b.targetDirectory))
 	}
 
-	err = os.RemoveAll(filepath.Join(b.sourceDirectory, "restore"))
+	err = os.RemoveAll(b.workDirectory)
 	if err != nil {
 		return errors.New(fmt.Sprintf("[Restore backup]> Failed to remove previous backup restore directory, %v", err))
 	}
@@ -59,14 +71,14 @@ func (b *RestoreManager) Restore() error {
 			backupSubDirectory = filepath.Join("incr", strconv.Itoa(i))
 		}
 
-		log.Println("Decompressing", filepath.Join(filepath.Join(b.sourceDirectory, backupSubDirectory), "backup.gz"), "to", filepath.Join(b.sourceDirectory, "restore", backupSubDirectory))
+		log.Println("Decompressing", filepath.Join(filepath.Join(b.sourceDirectory, backupSubDirectory), "backup.gz"), "to", filepath.Join(b.workDirectory, backupSubDirectory))
 		err := b.decompressBackup(backupSubDirectory)
 
 		if err != nil {
 			return err
 		}
 
-		log.Println("Preparing", filepath.Join(b.sourceDirectory, "restore", backupSubDirectory))
+		log.Println("Preparing", filepath.Join(b.workDirectory, backupSubDirectory))
 		err = b.prepareBackup(backupSubDirectory)
 
 		if err != nil {
@@ -84,7 +96,7 @@ func (b *RestoreManager) Restore() error {
 }
 
 func (b *RestoreManager) decompressBackup(backupSubDirectory string) error {
-	workDirectory := filepath.Join(b.sourceDirectory, "restore", backupSubDirectory)
+	workDirectory := filepath.Join(b.workDirectory, backupSubDirectory)
 
 	err := os.MkdirAll(workDirectory, 750)
 
@@ -108,7 +120,7 @@ func (b *RestoreManager) decompressBackup(backupSubDirectory string) error {
 
 	defer gzr.Close()
 
-	command := exec.Command("mbstream", "-x", "-C", workDirectory)
+	command := exec.Command(b.mbstreamBinary, "-x", "-C", workDirectory)
 
 	out, err := command.StdinPipe()
 	command.Stderr = os.Stderr
@@ -132,13 +144,13 @@ func (b *RestoreManager) decompressBackup(backupSubDirectory string) error {
 }
 
 func (b *RestoreManager) prepareBackup(backupSubDirectory string) error {
-	command := exec.Command("mariabackup",
+	command := exec.Command(b.mariabackupBinary,
 		"--prepare",
-		"--target-dir="+filepath.Join(b.sourceDirectory, "restore/full"),
+		"--target-dir="+filepath.Join(b.workDirectory, "full"),
 	)
 
 	if backupSubDirectory != "full" {
-		command.Args = append(command.Args, "--incremental-basedir="+filepath.Join(b.sourceDirectory, "restore", backupSubDirectory))
+		command.Args = append(command.Args, "--incremental-basedir="+filepath.Join(b.workDirectory, backupSubDirectory))
 	}
 
 	command.Stderr = os.Stderr
@@ -166,9 +178,9 @@ func (b *RestoreManager) prepareBackup(backupSubDirectory string) error {
 }
 
 func (b *RestoreManager) moveBackupToTargetDirectory() error {
-	command := exec.Command("mariabackup",
+	command := exec.Command(b.mariabackupBinary,
 		"--move-back",
-		"--target-dir="+filepath.Join(b.sourceDirectory, "restore/full"),
+		"--target-dir="+filepath.Join(b.workDirectory, "full"),
 	)
 
 	command.Stderr = os.Stderr
@@ -212,7 +224,7 @@ func (b *RestoreManager) moveBackupToTargetDirectory() error {
 }
 
 func (b *RestoreManager) getBackupPosition() (int, error) {
-	data, err := ioutil.ReadFile(filepath.Join(b.sourceDirectory, "mariabackup.pos"))
+	data, err := ioutil.ReadFile(b.backupPositionFile)
 	if err != nil {
 		return 0, errors.New(fmt.Sprintf("[RestoreManager]> Failed to read backup position file, %v", err))
 	}

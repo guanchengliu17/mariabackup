@@ -18,13 +18,15 @@ const (
 )
 
 type BackupManager struct {
-	targetDirectory string
-	host            string
-	port            int
-	username        string
-	password        string
-	mode            string
-	dataDirectory   string
+	targetDirectory    string
+	host               string
+	port               int
+	username           string
+	password           string
+	mode               string
+	dataDirectory      string
+	mariabackupBinary  string
+	backupPositionFile string
 }
 
 func CreateBackupManager(
@@ -34,7 +36,9 @@ func CreateBackupManager(
 	Username string,
 	Password string,
 	Mode string,
-	DataDirectory string) (*BackupManager, error) {
+	DataDirectory string,
+	MariabackupBinary string,
+	BackupPositionFile string) (*BackupManager, error) {
 
 	switch Mode {
 	case FullBackupMode, IncrementalBackupMode:
@@ -44,13 +48,15 @@ func CreateBackupManager(
 	}
 
 	return &BackupManager{
-		targetDirectory: TargetDirectory,
-		host:            Host,
-		port:            Port,
-		username:        Username,
-		password:        Password,
-		mode:            Mode,
-		dataDirectory:   DataDirectory,
+		targetDirectory:    TargetDirectory,
+		host:               Host,
+		port:               Port,
+		username:           Username,
+		password:           Password,
+		mode:               Mode,
+		dataDirectory:      DataDirectory,
+		mariabackupBinary:  MariabackupBinary,
+		backupPositionFile: BackupPositionFile,
 	}, nil
 
 }
@@ -76,7 +82,7 @@ func (b *BackupManager) Backup() error {
 
 	} else if b.mode == IncrementalBackupMode {
 
-		data, err := ioutil.ReadFile(filepath.Join(b.targetDirectory, "mariabackup.pos"))
+		data, err := ioutil.ReadFile(b.backupPositionFile)
 
 		if err != nil {
 			return errors.New(fmt.Sprintf("[Incremental backup]> Failed to read backup position file, %v", err))
@@ -99,7 +105,7 @@ func (b *BackupManager) Backup() error {
 		}
 	}
 
-	command := exec.Command("mariabackup",
+	command := exec.Command(b.mariabackupBinary,
 		"--host="+b.host,
 		"--port="+strconv.Itoa(b.port),
 		"--user="+b.username,
@@ -181,7 +187,7 @@ func (b *BackupManager) executeCommandAndSaveOutput(backupPath string, command *
 }
 
 func (b *BackupManager) saveBackupPosition(position int, targetDirectory string) error {
-	f, err := os.Create(filepath.Join(targetDirectory, "mariabackup.pos"))
+	f, err := os.Create(b.backupPositionFile)
 
 	if err != nil {
 		return err
