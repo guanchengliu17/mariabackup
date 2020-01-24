@@ -25,8 +25,10 @@ type BackupManager struct {
 	password           string
 	mode               string
 	dataDirectory      string
-	mariabackupBinary  string
+	mariaBackupBinary  string
 	backupPositionFile string
+	gzBlockSize        int
+	gzThreads          int
 }
 
 func CreateBackupManager(
@@ -38,7 +40,10 @@ func CreateBackupManager(
 	Mode string,
 	DataDirectory string,
 	MariabackupBinary string,
-	BackupPositionFile string) (*BackupManager, error) {
+	BackupPositionFile string,
+	CompressionBlockSize int,
+	CompressionThreads int,
+) (*BackupManager, error) {
 
 	switch Mode {
 	case FullBackupMode, IncrementalBackupMode:
@@ -55,8 +60,10 @@ func CreateBackupManager(
 		password:           Password,
 		mode:               Mode,
 		dataDirectory:      DataDirectory,
-		mariabackupBinary:  MariabackupBinary,
+		mariaBackupBinary:  MariabackupBinary,
 		backupPositionFile: BackupPositionFile,
+		gzThreads:          CompressionThreads,
+		gzBlockSize:        CompressionBlockSize,
 	}, nil
 
 }
@@ -105,7 +112,7 @@ func (b *BackupManager) Backup() error {
 		}
 	}
 
-	command := exec.Command(b.mariabackupBinary,
+	command := exec.Command(b.mariaBackupBinary,
 		"--host="+b.host,
 		"--port="+strconv.Itoa(b.port),
 		"--user="+b.username,
@@ -144,10 +151,13 @@ func (b *BackupManager) executeCommandAndSaveOutput(backupPath string, command *
 
 	gzw, err := gzip.NewWriterLevel(file, gzip.BestSpeed)
 
-	gzw.SetConcurrency(2048<<10, 16) //todo: implement config, handle errors
-
 	if err != nil {
 		return errors.New("Failed to create gzip writer:" + err.Error())
+	}
+
+	err = gzw.SetConcurrency(b.gzBlockSize, b.gzThreads)
+	if err != nil {
+		return errors.New("gzip.SetConcurrency() - " + err.Error())
 	}
 
 	defer gzw.Close()

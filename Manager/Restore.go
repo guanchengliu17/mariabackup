@@ -18,26 +18,33 @@ type RestoreManager struct {
 	sourceDirectory    string
 	targetDirectory    string
 	workDirectory      string
-	mariabackupBinary  string
+	mariaBackupBinary  string
 	backupPositionFile string
-	mbstreamBinary     string
+	mbStreamBinary     string
+	gzBlockSize        int
+	gzThreads          int
 }
 
 func CreateRestoreManager(
 	SourceDirectory string,
 	TargetDirectory string,
 	WorkDirectory string,
-	MariabackupBinary string,
+	MariaBackupBinary string,
 	BackupPositionFile string,
-	MbstreamBinary string) (*RestoreManager, error) {
+	MbStreamBinary string,
+	CompressionBlockSize int,
+	DecompressionThreads int,
+) (*RestoreManager, error) {
 
 	return &RestoreManager{
 		sourceDirectory:    SourceDirectory,
 		targetDirectory:    TargetDirectory,
 		workDirectory:      WorkDirectory,
-		mariabackupBinary:  MariabackupBinary,
+		mariaBackupBinary:  MariaBackupBinary,
 		backupPositionFile: BackupPositionFile,
-		mbstreamBinary:     MbstreamBinary,
+		mbStreamBinary:     MbStreamBinary,
+		gzBlockSize:        CompressionBlockSize,
+		gzThreads:          DecompressionThreads,
 	}, nil
 
 }
@@ -112,7 +119,7 @@ func (b *RestoreManager) decompressBackup(backupSubDirectory string) error {
 
 	defer f.Close()
 
-	gzr, err := gzip.NewReader(f) //todo: implement NewReaderN logic to use multiple blocks and custom buffer size for decompressing
+	gzr, err := gzip.NewReaderN(f, b.gzBlockSize, b.gzThreads)
 
 	if err != nil {
 		return err
@@ -120,7 +127,7 @@ func (b *RestoreManager) decompressBackup(backupSubDirectory string) error {
 
 	defer gzr.Close()
 
-	command := exec.Command(b.mbstreamBinary, "-x", "-C", workDirectory)
+	command := exec.Command(b.mbStreamBinary, "-x", "-C", workDirectory)
 
 	out, err := command.StdinPipe()
 	command.Stderr = os.Stderr
@@ -144,7 +151,7 @@ func (b *RestoreManager) decompressBackup(backupSubDirectory string) error {
 }
 
 func (b *RestoreManager) prepareBackup(backupSubDirectory string) error {
-	command := exec.Command(b.mariabackupBinary,
+	command := exec.Command(b.mariaBackupBinary,
 		"--prepare",
 		"--target-dir="+filepath.Join(b.workDirectory, "full"),
 	)
@@ -178,7 +185,7 @@ func (b *RestoreManager) prepareBackup(backupSubDirectory string) error {
 }
 
 func (b *RestoreManager) moveBackupToTargetDirectory() error {
-	command := exec.Command(b.mariabackupBinary,
+	command := exec.Command(b.mariaBackupBinary,
 		"--move-back",
 		"--target-dir="+filepath.Join(b.workDirectory, "full"),
 	)

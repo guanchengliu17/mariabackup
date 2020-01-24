@@ -2,55 +2,95 @@ package Manager
 
 import (
 	"encoding/json"
-	"log"
+	"io/ioutil"
+	"os"
 )
 
-type ConfigManager struct {
-	MariabackupBinary string
-	MbstreamBinary    string
-	PositionFile      string
-	Backup            struct {
-		TargetDirectory    string
-		MySQLHost          string
-		MySQLPort          int
-		MySQLUsername      string
-		MySQLPassword      string
-		Mode               string
-		MySQLDataDirectory string
-	}
-	Restore struct {
-		SourceDirectory string
-		TargetDirectory string
-		WorkDirectory   string
-	}
+type Config struct {
+	MariaBackupBinary string  `json:"maria_backup_binary"`
+	MbStreamBinary    string  `json:"mb_stream_binary"`
+	PositionFile      string  `json:"position_file"`
+	Backup            backup  `json:"backup"`
+	Restore           restore `json:"restore"`
+	ParallelThreads   int     `json:"parallel_threads"`
+	GzipThreads       int     `json:"compression_threads"`
+	GzipBlockSize     int     `json:"compression_block_size"`
 }
 
-func LoadConfiguration() ([]byte, error) {
+type restore struct {
+	SourceDirectory string `json:"source_directory"`
+	TargetDirectory string `json:"target_directory"`
+	WorkDirectory   string `json:"work_directory"`
+}
 
-	jsonData := &ConfigManager{
-		MariabackupBinary: "/usr/bin/mariabackup",
-		MbstreamBinary:    "/usr/bin/mbstream",
+type backup struct {
+	TargetDirectory string `json:"target_directory"`
+	Host            string `json:"host"`
+	Port            int    `json:"port"`
+	Username        string `json:"username"`
+	Password        string `json:"password"`
+	Mode            string `json:"mode"`
+	DataDirectory   string `json:"data_directory"`
+}
+
+func CreateNewConfig() *Config {
+
+	config := &Config{Restore: restore{
+		SourceDirectory: "/backup/mariabackup",
+		TargetDirectory: "/var/lib/mysql",
+		WorkDirectory:   "/backup/mariabackup/restore",
+	},
+		Backup: backup{
+			TargetDirectory: "/backup/mariabackup",
+			Host:            "localhost",
+			Port:            3306,
+			Username:        "mariabackup",
+			Password:        "",
+			Mode:            "full",
+			DataDirectory:   "/var/lib/mysql",
+		},
+		MariaBackupBinary: "/usr/bin/mariabackup",
+		MbStreamBinary:    "/usr/bin/mbstream",
 		PositionFile:      "/backup/mariabackup/mariabackup.pos",
+		GzipBlockSize:     512 << 10,
+		GzipThreads:       8,
+		ParallelThreads:   4,
 	}
 
-	jsonData.Backup.MySQLHost = "localhost"
-	jsonData.Backup.MySQLPort = 3306
-	jsonData.Backup.MySQLUsername = "mariabackup"
-	jsonData.Backup.MySQLPassword = ""
-	jsonData.Backup.Mode = "full"
-	jsonData.Backup.TargetDirectory = "/backup/mariabackup"
-	jsonData.Backup.MySQLDataDirectory = "/var/lib/mysql"
+	return config
+}
 
-	jsonData.Restore.SourceDirectory = "/backup/mariabackup"
-	jsonData.Restore.TargetDirectory = "/var/lib/mysql"
-	jsonData.Restore.WorkDirectory = "/backup/mariabackup/restore"
-
-	var config []byte
-	config, err := json.Marshal(jsonData)
+func (c *Config) Load(file string) error {
+	data, err := ioutil.ReadFile(file)
 
 	if err != nil {
-		log.Println(err)
+		return err
 	}
 
-	return config, nil
+	return json.Unmarshal(data, &c)
+}
+
+func (c *Config) CheckIfExists(file string) error {
+	_, err := os.Stat(file)
+	return err
+}
+
+func (c *Config) Save(file string) error {
+	payload, err := json.MarshalIndent(&c, "", "\t")
+
+	if err != nil {
+		return err
+	}
+
+	fh, err := os.OpenFile(file, os.O_CREATE|os.O_WRONLY, 0644)
+
+	if err != nil {
+		return err
+	}
+
+	defer fh.Close()
+
+	_, err = fh.Write(payload)
+
+	return err
 }

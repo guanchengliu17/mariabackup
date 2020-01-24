@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 	"gitlab.com/scoro/infrastructure/mariabackup/Manager"
@@ -9,56 +8,45 @@ import (
 	"os"
 )
 
-func main() {
+//backup command
+var Backup = flag.NewFlagSet("backup", flag.ExitOnError)
+var BackupHost = Backup.String("host", "", "database host")
+var BackupPort = Backup.Int("port", 0, "database port")
+var BackupUsername = Backup.String("username", "", "database username")
+var BackupPassword = Backup.String("password", "", "database password")
+var BackupMode = Backup.String("mode", "", "backup mode - full|incremental")
+var BackupTargetDirectory = Backup.String("target-dir", "", "directory in which the backups will be placed")
+var BackupDataDirectory = Backup.String("datadir", "", "directory where the MySQL data is stored")
+var BackupMariaBackupBinary = Backup.String("mariabackup-binary", "", "mariabackup binary")
+var BackupPositionFile = Backup.String("backup-position-file", "", "file where backup position is stored")
+var BackupConfigFile = Backup.String("config-file", "", "configuration file")
+var BackupParallelThreads = Backup.Int("parallel-threads", 0, "parallel threads for mariabackup")
+var BackupGzipThreads = Backup.Int("gzip-threads", 0, "gzip number of threads")
+var BackupGzipBlockSize = Backup.Int("gzip-block", 0, "number of bytes gzip processes per cycle")
 
+//restore command
+var Restore = flag.NewFlagSet("restore", flag.ExitOnError)
+var RestoreSourceDirectory = Restore.String("source-dir", "", "directory in which the backups are stored")
+var RestoreTargetDirectory = Restore.String("target-dir", "", "directory where the MySQL data is stored")
+var RestoreWorkDirectory = Restore.String("work-dir", "", "directory where temporary data is stored during restore process")
+var RestoreMariaBackupBinary = Restore.String("mariabackup-binary", "", "mariabackup binary")
+var RestorePositionFile = Restore.String("backup-position-file", "", "file where backup position is stored")
+var RestoreMbStreamBinary = Restore.String("mbstream-binary", "", "mbstream binary")
+var RestoreConfigFile = Restore.String("config-file", "", "configuration file")
+var RestoreGzipThreads = Restore.Int("gzip-threads", 0, "gzip number of threads")
+var RestoreGzipBlockSize = Restore.Int("gzip-block", 0, "number of bytes gzip processes per cycle")
+
+func main() {
 	log.SetFlags(log.Ldate | log.Ltime)
 
-	type ConfigManager Manager.ConfigManager
-
-	var config ConfigManager
-	configData, err := Manager.LoadConfiguration()
-
-	if err != nil {
-		log.Println("Configuration loading failed:", err)
-		return
-	}
-
-	err = json.Unmarshal([]byte(configData), &config)
-
-	if err != nil {
-		log.Println("Configuration parsing failed:", err)
-		return
-	}
-
-	//backup command
-	BackupCommand := flag.NewFlagSet("backup", flag.ExitOnError)
-	BackupCommandMySQLHost := BackupCommand.String("host", config.Backup.MySQLHost, "database host")
-	BackupCommandMySQLPort := BackupCommand.Int("port", config.Backup.MySQLPort, "database port")
-	BackupCommandMySQLUsername := BackupCommand.String("username", config.Backup.MySQLUsername, "database username")
-	BackupCommandMySQLPassword := BackupCommand.String("password", config.Backup.MySQLPassword, "database password")
-	BackupCommandMode := BackupCommand.String("mode", config.Backup.Mode, "backup mode - full|incremental")
-	BackupCommandTargetDirectory := BackupCommand.String("target-dir", config.Backup.TargetDirectory, "directory in which the backups will be placed")
-	BackupCommandMySQLDataDirectory := BackupCommand.String("datadir", config.Backup.MySQLDataDirectory, "directory where the MySQL data is stored")
-	BackupCommandMariabackupBinary := BackupCommand.String("mariabackup-binary", config.MariabackupBinary, "mariabackup binary")
-	BackupCommandPositionFile := BackupCommand.String("backup-position-file", config.PositionFile, "file where backup position is stored")
-
-	//restore command
-	RestoreCommand := flag.NewFlagSet("restore", flag.ExitOnError)
-	RestoreCommandSourceDirectory := RestoreCommand.String("source-dir", config.Restore.SourceDirectory, "directory in which the backups are stored")
-	RestoreCommandTargetDirectory := RestoreCommand.String("target-dir", config.Restore.TargetDirectory, "directory where the MySQL data is stored")
-	RestoreCommandWorkDirectory := RestoreCommand.String("work-dir", config.Restore.WorkDirectory, "directory where temporary data is stored during restore process")
-	RestoreCommandMariabackupBinary := RestoreCommand.String("mariabackup-binary", config.MariabackupBinary, "mariabackup binary")
-	RestoreCommandPositionFile := RestoreCommand.String("backup-position-file", config.PositionFile, "file where backup position is stored")
-	RestoreCommandMbstreamBinary := RestoreCommand.String("mbstream-binary", config.MbstreamBinary, "mbstream binary")
-
 	if len(os.Args) < 2 {
-		log.Println("Invalid number of arguments. Usage: ./<binary> <command>")
+		log.Println("Invalid number of arguments. Usage: " + os.Args[0] + " <command>")
 		return
 	}
 
 	switch os.Args[1] {
 	case "backup":
-		err := BackupCommand.Parse(os.Args[2:])
+		err := Backup.Parse(os.Args[2:])
 
 		if err != nil {
 			log.Println("Parsing backup command failed:", err)
@@ -66,21 +54,25 @@ func main() {
 		}
 		//do backup
 
-		log.Println("Backup data directory:", *BackupCommandMySQLDataDirectory)
-		log.Println("Backup target directory:", *BackupCommandTargetDirectory)
-		log.Println("Mariabackup binary:", *BackupCommandMariabackupBinary)
-		log.Println("Backup position file:", *BackupCommandPositionFile)
+		config := loadConfig()
+
+		log.Println("Backup data directory:", config.Backup.DataDirectory)
+		log.Println("Backup target directory:", config.Backup.TargetDirectory)
+		log.Println("MariaBackup binary:", config.MariaBackupBinary)
+		log.Println("Backup position file:", config.PositionFile)
 
 		backup, err := Manager.CreateBackupManager(
-			*BackupCommandTargetDirectory,
-			*BackupCommandMySQLHost,
-			*BackupCommandMySQLPort,
-			*BackupCommandMySQLUsername,
-			*BackupCommandMySQLPassword,
-			*BackupCommandMode,
-			*BackupCommandMySQLDataDirectory,
-			*BackupCommandMariabackupBinary,
-			*BackupCommandPositionFile,
+			config.Backup.TargetDirectory,
+			config.Backup.Host,
+			config.Backup.Port,
+			config.Backup.Username,
+			config.Backup.Password,
+			config.Backup.Mode,
+			config.Backup.DataDirectory,
+			config.MariaBackupBinary,
+			config.PositionFile,
+			config.GzipBlockSize,
+			config.GzipThreads,
 		)
 
 		if err != nil {
@@ -98,23 +90,27 @@ func main() {
 		log.Printf("Backup successfully finished")
 
 	case "restore":
-		err := RestoreCommand.Parse(os.Args[2:])
+		err := Restore.Parse(os.Args[2:])
 		if err != nil {
 			log.Println("Parsing restore command failed:", err)
 			return
 		}
 		//do restore
 
-		log.Println("Restore source directory:", *RestoreCommandSourceDirectory)
-		log.Println("Restore target directory:", *RestoreCommandTargetDirectory)
+		config := loadConfig()
+
+		log.Println("Restore source directory:", config.Restore.SourceDirectory)
+		log.Println("Restore target directory:", config.Restore.TargetDirectory)
 
 		restore, err := Manager.CreateRestoreManager(
-			*RestoreCommandSourceDirectory,
-			*RestoreCommandTargetDirectory,
-			*RestoreCommandWorkDirectory,
-			*RestoreCommandMariabackupBinary,
-			*RestoreCommandPositionFile,
-			*RestoreCommandMbstreamBinary,
+			config.Restore.SourceDirectory,
+			config.Restore.TargetDirectory,
+			config.Restore.WorkDirectory,
+			config.MariaBackupBinary,
+			config.PositionFile,
+			config.MbStreamBinary,
+			config.GzipBlockSize,
+			config.GzipThreads,
 		)
 
 		if err != nil {
@@ -135,4 +131,125 @@ func main() {
 		fmt.Printf("%q is not valid command\n", os.Args[1])
 		return
 	}
+}
+
+func loadConfig() *Manager.Config {
+	config := Manager.CreateNewConfig()
+
+	configFile := "config.json" //default
+
+	//determine the config file based on the command
+
+	if Backup.Parsed() {
+		if len(*BackupConfigFile) > 0 {
+			configFile = *BackupConfigFile
+		}
+	}
+
+	if Restore.Parsed() {
+		if len(*RestoreConfigFile) > 0 {
+			configFile = *RestoreConfigFile
+		}
+	}
+
+	if config.CheckIfExists(configFile) != nil {
+		err := config.Save(configFile) //try to create config file
+		if err != nil {
+			log.Fatalln("Failed to create config file", err)
+		}
+	}
+	err := config.Load("config.json")
+
+	if err != nil {
+		log.Fatalln("Failed to read config file: ", err)
+	}
+
+	if Backup.Parsed() {
+
+		if len(*BackupHost) > 0 {
+			config.Backup.Host = *BackupHost
+		}
+
+		if *BackupPort > 0 {
+			config.Backup.Port = *BackupPort
+		}
+
+		if len(*BackupUsername) > 0 {
+			config.Backup.Username = *BackupUsername
+		}
+
+		if len(*BackupPassword) > 0 {
+			config.Backup.Password = *BackupPassword
+		}
+
+		if len(*BackupMode) > 0 {
+			config.Backup.Mode = *BackupMode
+		}
+
+		if len(*BackupTargetDirectory) > 0 {
+			config.Backup.TargetDirectory = *BackupTargetDirectory
+		}
+
+		if len(*BackupDataDirectory) > 0 {
+			config.Backup.DataDirectory = *BackupDataDirectory
+		}
+
+		if len(*BackupMariaBackupBinary) > 0 {
+			config.MariaBackupBinary = *BackupMariaBackupBinary
+		}
+
+		if len(*BackupPositionFile) > 0 {
+			config.PositionFile = *BackupPositionFile
+		}
+
+		if *BackupParallelThreads > 0 {
+			config.ParallelThreads = *BackupParallelThreads
+		}
+
+		if *BackupGzipThreads > 0 {
+			config.GzipThreads = *BackupGzipThreads
+		}
+
+		if *BackupGzipBlockSize > 0 {
+			config.GzipBlockSize = *BackupGzipBlockSize
+		}
+
+	}
+
+	if Restore.Parsed() {
+
+		if len(*RestoreSourceDirectory) > 0 {
+			config.Restore.SourceDirectory = *RestoreSourceDirectory
+		}
+
+		if len(*RestoreTargetDirectory) > 0 {
+			config.Restore.TargetDirectory = *RestoreTargetDirectory
+		}
+
+		if len(*RestoreWorkDirectory) > 0 {
+			config.Restore.WorkDirectory = *RestoreWorkDirectory
+		}
+
+		if len(*RestoreMariaBackupBinary) > 0 {
+			config.MariaBackupBinary = *RestoreMariaBackupBinary
+		}
+
+		if len(*RestorePositionFile) > 0 {
+			config.PositionFile = *RestorePositionFile
+		}
+
+		if len(*RestoreMbStreamBinary) > 0 {
+			config.MbStreamBinary = *RestoreMbStreamBinary
+		}
+
+		if *RestoreGzipThreads > 0 {
+			config.GzipThreads = *RestoreGzipThreads
+		}
+
+		if *RestoreGzipBlockSize > 0 {
+			config.GzipBlockSize = *RestoreGzipBlockSize
+		}
+	}
+
+	return config
 }
