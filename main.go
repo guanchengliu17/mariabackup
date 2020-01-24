@@ -73,6 +73,7 @@ func main() {
 			config.PositionFile,
 			config.GzipBlockSize,
 			config.GzipThreads,
+			config.ParallelThreads,
 		)
 
 		if err != nil {

@@ -29,6 +29,7 @@ type BackupManager struct {
 	backupPositionFile string
 	gzBlockSize        int
 	gzThreads          int
+	parallelThreads    int
 }
 
 func CreateBackupManager(
@@ -39,10 +40,11 @@ func CreateBackupManager(
 	Password string,
 	Mode string,
 	DataDirectory string,
-	MariabackupBinary string,
+	MariaBackupBinary string,
 	BackupPositionFile string,
 	CompressionBlockSize int,
 	CompressionThreads int,
+	ParallelThreads int,
 ) (*BackupManager, error) {
 
 	switch Mode {
@@ -60,10 +62,11 @@ func CreateBackupManager(
 		password:           Password,
 		mode:               Mode,
 		dataDirectory:      DataDirectory,
-		mariaBackupBinary:  MariabackupBinary,
+		mariaBackupBinary:  MariaBackupBinary,
 		backupPositionFile: BackupPositionFile,
 		gzThreads:          CompressionThreads,
 		gzBlockSize:        CompressionBlockSize,
+		parallelThreads:    ParallelThreads,
 	}, nil
 
 }
@@ -122,7 +125,7 @@ func (b *BackupManager) Backup() error {
 		"--datadir="+b.dataDirectory,
 		"--target_dir="+backupPath,
 		"--extra-lsndir="+backupPath,
-		"--parallel=4",
+		"--parallel="+strconv.Itoa(b.parallelThreads),
 		"--stream=xbstream",
 	)
 
@@ -136,7 +139,7 @@ func (b *BackupManager) Backup() error {
 		return err
 	}
 
-	return b.saveBackupPosition(backupPos, b.targetDirectory)
+	return b.saveBackupPosition(backupPos)
 }
 
 func (b *BackupManager) executeCommandAndSaveOutput(backupPath string, command *exec.Cmd) error {
@@ -196,7 +199,7 @@ func (b *BackupManager) executeCommandAndSaveOutput(backupPath string, command *
 	return nil
 }
 
-func (b *BackupManager) saveBackupPosition(position int, targetDirectory string) error {
+func (b *BackupManager) saveBackupPosition(position int) error {
 	f, err := os.Create(b.backupPositionFile)
 
 	if err != nil {
