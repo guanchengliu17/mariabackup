@@ -22,6 +22,8 @@ var Threads = flag.Int("threads", 1, "Number of threads used for generation")
 func main() {
 	flag.Parse()
 
+	log.SetFlags(log.Lshortfile | log.Ltime)
+
 	log.Println("Running Database generator tool")
 
 	db, err := sql.Open("mysql", fmt.Sprintf("%s:%s@tcp(%s:%d)/information_schema", *User, *Password, *Host, *Port))
@@ -58,8 +60,10 @@ func main() {
 		go func(wg *sync.WaitGroup, data chan int) {
 			defer wg.Done()
 
+			c := getConn()
+
 			for i := range data {
-				generate(getConn(), i, *Records)
+				generate(c, i, *Records)
 			}
 
 		}(wg, data)
@@ -86,10 +90,16 @@ func getConn() *sql.DB {
 		log.Fatalln("Failed to open database connection", err)
 	}
 
+	err = db.Ping()
+
+	if err != nil {
+		log.Fatalln("Failed to ping new connection", err)
+	}
+
 	_, err = db.Exec("use " + *Database)
 
 	if err != nil {
-		log.Fatalln(err)
+		log.Fatalln("Connection opening error:", err)
 	}
 
 	return db

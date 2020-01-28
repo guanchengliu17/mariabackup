@@ -115,7 +115,7 @@ func (b *BackupManager) Backup() error {
 		}
 	}
 
-	command := exec.Command(b.mariaBackupBinary,
+	command := exec.Command("stdbuf", "--output=4M", b.mariaBackupBinary,
 		"--host="+b.host,
 		"--port="+strconv.Itoa(b.port),
 		"--user="+b.username,
