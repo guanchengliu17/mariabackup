@@ -25,16 +25,7 @@ type RestoreManager struct {
 	gzThreads          int
 }
 
-func CreateRestoreManager(
-	SourceDirectory string,
-	TargetDirectory string,
-	WorkDirectory string,
-	MariaBackupBinary string,
-	BackupPositionFile string,
-	MbStreamBinary string,
-	CompressionBlockSize int,
-	DecompressionThreads int,
-) (*RestoreManager, error) {
+func CreateRestoreManager(SourceDirectory string, TargetDirectory string, WorkDirectory string, MariaBackupBinary string, BackupPositionFile string, MbStreamBinary string, CompressionBlockSize int, DecompressionThreads int, ) (*RestoreManager, error) {
 
 	return &RestoreManager{
 		sourceDirectory:    SourceDirectory,

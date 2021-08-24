@@ -31,6 +31,12 @@ type backup struct {
 	Password        string `json:"password"`
 	Mode            string `json:"mode"`
 	DataDirectory   string `json:"data_directory"`
+	S3              struct {
+		Region    string `json:"region"`
+		AccessKey string `json:"access_key"`
+		Secret    string `json:"secret"`
+		Bucket    string `json:"bucket"`
+	}
 }
 
 func CreateNewConfig() *Config {
