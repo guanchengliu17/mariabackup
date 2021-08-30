@@ -24,7 +24,6 @@ var BackupParallelThreads = Backup.Int("parallel-threads", 0, "parallel threads 
 var BackupGzipThreads = Backup.Int("gzip-threads", 0, "gzip number of threads")
 var BackupGzipBlockSize = Backup.Int("gzip-block", 0, "number of bytes gzip processes per cycle")
 var BackupToS3 = Backup.Bool("backup-to-s3", false, "When true upload to S3")
-var BackupS3BucketURL = Backup.String("s3-bucket-url", "", "URL of the target S3 bucket")
 
 //restore command
 var Restore = flag.NewFlagSet("restore", flag.ExitOnError)
@@ -37,8 +36,7 @@ var RestoreMbStreamBinary = Restore.String("mbstream-binary", "", "mbstream bina
 var RestoreConfigFile = Restore.String("config-file", "", "configuration file")
 var RestoreGzipThreads = Restore.Int("gzip-threads", 0, "gzip number of threads")
 var RestoreGzipBlockSize = Restore.Int("gzip-block", 0, "number of bytes gzip processes per cycle")
-
-//var RestoreS3BucketURL = Backup.String("s3-bucket-url", "", "URL of the source S3 bucket")
+var RestoreFromS3 = Restore.Bool("restore-from-s3", false, "When true restore from S3")
 
 func main() {
 	log.SetFlags(log.Ldate | log.Ltime)
@@ -94,21 +92,20 @@ func main() {
 
 		log.Printf("Backup successfully finished")
 
-		backupToS3 := *BackupToS3
+		if *BackupToS3 {
 
-		if backupToS3 {
-			upload, err := Manager.CreateUploadManager(
+			upload, err := Manager.CreateS3Manager(
 				config.Backup.S3.AccessKey,
 				config.Backup.S3.Region,
 				config.Backup.S3.Bucket,
 				config.Backup.S3.Secret,
-				)
+			)
 
 			if err != nil {
-				log.Printf("Failed to initizalize upload")
+				fmt.Println(err)
 			}
 
-			_, err = upload.Upload(config.Backup.TargetDirectory)
+			upload.Upload(config.Backup.S3.UploadDirectory)
 		}
 
 	case "restore":
@@ -123,6 +120,21 @@ func main() {
 
 		log.Println("Restore source directory:", config.Restore.SourceDirectory)
 		log.Println("Restore target directory:", config.Restore.TargetDirectory)
+
+		if *RestoreFromS3 {
+
+			download, err := Manager.CreateS3Manager(
+				config.Backup.S3.AccessKey,
+				config.Backup.S3.Region,
+				config.Backup.S3.Bucket,
+				config.Backup.S3.Secret,
+			)
+
+			if err != nil {
+				fmt.Println(err)
+			}
+			download.Download(config.Backup.S3.UploadDirectory)
+		}
 
 		restore, err := Manager.CreateRestoreManager(
 			config.Restore.SourceDirectory,

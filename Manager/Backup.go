@@ -15,6 +15,7 @@ import (
 const (
 	FullBackupMode        = "full"
 	IncrementalBackupMode = "incremental"
+	AwsConcurrencyLevel   = 16
 )
 
 type BackupManager struct {

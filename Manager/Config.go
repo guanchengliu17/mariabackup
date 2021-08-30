@@ -32,10 +32,12 @@ type backup struct {
 	Mode            string `json:"mode"`
 	DataDirectory   string `json:"data_directory"`
 	S3              struct {
-		Region    string `json:"region"`
-		AccessKey string `json:"access_key"`
-		Secret    string `json:"secret"`
-		Bucket    string `json:"bucket"`
+		Region              string `json:"region"`
+		AccessKey           string `json:"access_key"`
+		Secret              string `json:"secret"`
+		Bucket              string `json:"bucket"`
+		UploadDirectory     string `json:"upload_directory"`
+		AwsConcurrencyLevel int    `json:"aws_concurrency_level"`
 	}
 }
 
