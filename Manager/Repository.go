@@ -52,7 +52,7 @@ func CreateS3Manager(
 
 func (s *S3Manager) Upload(backup string) {
 
-	files := []string{"backup.gz", "xtrabackup_info", "xtrabackup_checkpoints"}
+	files := []string{"backup.gz.enc", "xtrabackup_info", "xtrabackup_checkpoints"}
 
 	for i := range files {
 		ulp := &UploadProgress{}
@@ -71,12 +71,12 @@ func (s *S3Manager) Upload(backup string) {
 	}
 }
 
-func (s *S3Manager) Download(backup string) {
+func (s *S3Manager) Download(backup string, restoreDate string) {
 	//check if exists
-	if s.IsPushed(GenerateDownloadS3Path("backup.gz", "2021-08-30")) == false {
+	if s.IsPushed(GenerateDownloadS3Path("backup.gz.enc", restoreDate)) == false {
 	}
 
-	files := []string{"backup.gz", "xtrabackup_info", "xtrabackup_checkpoints"}
+	files := []string{"backup.gz.enc", "xtrabackup_info", "xtrabackup_checkpoints"}
 
 	for i := range files {
 		fh, err := os.OpenFile(filepath.Join(backup, files[i]), os.O_CREATE|os.O_WRONLY, 0600)
@@ -84,7 +84,7 @@ func (s *S3Manager) Download(backup string) {
 		if err != nil {
 			fmt.Println(err)
 		}
-		_, err = dlp.Download(s.awsSession, GenerateDownloadS3Path(files[i], "2021-08-30"), s.bucket, fh)
+		_, err = dlp.Download(s.awsSession, GenerateDownloadS3Path(files[i], restoreDate), s.bucket, fh)
 		if err != nil {
 			fmt.Println(err)
 		}

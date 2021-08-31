@@ -9,28 +9,15 @@ import (
 	"sync/atomic"
 )
 
-/**
-S3 upload implementation with progression tracking
-
-Usage:
-	Call Upload()
-	Read the ProgressUpdate channel until the channel is closed with error or ProgressUpdate.Finished = true
-*/
 type UploadProgress struct {
 	reader io.Reader
 	bytes  int64
 }
 
-/**
-Number of bytes uploaded
-*/
 func (u *UploadProgress) BytesSent() int64 {
 	return atomic.LoadInt64(&u.bytes)
 }
 
-/**
-Wrapper for Read() for compatibility with io.Reader
-*/
 func (u *UploadProgress) Read(p []byte) (n int, err error) {
 	num, err := u.reader.Read(p)
 	//Track the number of bytes uploaded

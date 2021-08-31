@@ -122,7 +122,6 @@ func (b *BackupManager) Backup() error {
 		"--user="+b.username,
 		"--password="+b.password,
 		"--backup",
-		"--version-check",
 		"--datadir="+b.dataDirectory,
 		"--target_dir="+backupPath,
 		"--extra-lsndir="+backupPath,

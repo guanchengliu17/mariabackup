@@ -10,22 +10,11 @@ import (
 	"sync/atomic"
 )
 
-/**
-S3 download implementation with progression tracking
-
-Usage:
-	Call Download()
-	Read the ProgressUpdate channel until the channel is closed with error or ProgressUpdate.Finished = true
-*/
 type DownloadProgress struct {
 	writer io.WriterAt
 	bytes  int64
 }
 
-/**
-NOTE: This function should not be called concurrently, create separate instance instead
-Download wrapper with channel for reporting updates once per second
-*/
 func (d *DownloadProgress) Download(sess *session.Session, key string, bucket string, writer io.WriterAt) (chan ProgressUpdate, error) {
 	//Resets the value just in case
 	atomic.StoreInt64(&d.bytes, 0)
@@ -72,18 +61,12 @@ func (d *DownloadProgress) Download(sess *session.Session, key string, bucket st
 	return updates, nil
 }
 
-/**
-WriteAt wrapper
-*/
 func (d *DownloadProgress) WriteAt(p []byte, off int64) (n int, err error) {
 	atomic.AddInt64(&d.bytes, int64(len(p))) //increment
 
 	return d.writer.WriteAt(p, off)
 }
 
-/**
-Returns number of bytes written
-*/
 func (d *DownloadProgress) BytesWritten() int64 {
 	return atomic.LoadInt64(&d.bytes)
 }
