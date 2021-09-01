@@ -20,11 +20,10 @@ func RemoteLookup(sess *session.Session, prefix string, bucket string) ([]string
 		log.Println("[ERROR] Error during RemoteLookup() error:", err)
 		return nil, err
 	}
-	log.Printf("in remotelookup function")
 
 	results := make([]string, 0)
 	for _, record := range out.Contents {
-		results = append(results,*record.Key)
+		results = append(results, *record.Key)
 	}
 
 	return results, nil

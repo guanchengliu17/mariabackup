@@ -6,6 +6,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
+	"log"
 	"os"
 	"path/filepath"
 	"time"
@@ -72,18 +73,26 @@ func (s *S3Manager) Upload(backup string) {
 }
 
 func (s *S3Manager) Download(backup string, restoreDate string) {
-	//check if exists
+	//check if backup exists in S3
 	if s.IsPushed(GenerateDownloadS3Path("backup.gz.enc", restoreDate)) == false {
 	}
 
 	files := []string{"backup.gz.enc", "xtrabackup_info", "xtrabackup_checkpoints"}
 
+	if _, err := os.Stat(backup); os.IsNotExist(err) {
+		err := os.Mkdir(backup, 0755)
+		if err != nil {
+			log.Printf("Unable to create backups directory")
+		}
+	}
+
 	for i := range files {
-		fh, err := os.OpenFile(filepath.Join(backup, files[i]), os.O_CREATE|os.O_WRONLY, 0600)
-		dlp := &DownloadProgress{}
+		fh, err := os.OpenFile(filepath.Join(backup, files[i]), os.O_CREATE|os.O_WRONLY, 0640)
 		if err != nil {
 			fmt.Println(err)
 		}
+
+		dlp := &DownloadProgress{}
 		_, err = dlp.Download(s.awsSession, GenerateDownloadS3Path(files[i], restoreDate), s.bucket, fh)
 		if err != nil {
 			fmt.Println(err)
