@@ -3,9 +3,10 @@ package main
 import (
 	"flag"
 	"fmt"
-	"gitlab.com/scoro/infrastructure/mariabackup/Manager"
+	"github.com/karlmjogila/mariabackup/Manager"
 	"log"
 	"os"
+	"path/filepath"
 )
 
 //backup command
@@ -23,6 +24,7 @@ var BackupConfigFile = Backup.String("config-file", "", "configuration file")
 var BackupParallelThreads = Backup.Int("parallel-threads", 0, "parallel threads for mariabackup")
 var BackupGzipThreads = Backup.Int("gzip-threads", 0, "gzip number of threads")
 var BackupGzipBlockSize = Backup.Int("gzip-block", 0, "number of bytes gzip processes per cycle")
+var BackupToS3 = Backup.Bool("backup-to-s3", false, "When true upload to S3")
 
 //restore command
 var Restore = flag.NewFlagSet("restore", flag.ExitOnError)
@@ -35,6 +37,8 @@ var RestoreMbStreamBinary = Restore.String("mbstream-binary", "", "mbstream bina
 var RestoreConfigFile = Restore.String("config-file", "", "configuration file")
 var RestoreGzipThreads = Restore.Int("gzip-threads", 0, "gzip number of threads")
 var RestoreGzipBlockSize = Restore.Int("gzip-block", 0, "number of bytes gzip processes per cycle")
+var RestoreFromS3 = Restore.Bool("restore-from-s3", false, "When true restore from S3")
+var RestoreDate = Restore.String("restore-date", "", "backup creation date from S3, format YYYY-MM-DD")
 
 func main() {
 	log.SetFlags(log.Ldate | log.Ltime)
@@ -90,6 +94,40 @@ func main() {
 
 		log.Printf("Backup successfully finished")
 
+		if *BackupToS3 {
+
+			encrypt := Manager.Encrypt{}
+
+			err1 := encrypt.Encrypt(
+				filepath.Join(config.S3.UploadDirectory, "backup.gz"),
+				filepath.Join(config.S3.UploadDirectory, "backup.gz.enc"),
+				"enc_key",
+				1024,
+				config.S3.UploadDirectory,
+			)
+
+			if err1 != nil {
+				return
+			}
+
+			if err != nil {
+				log.Println("Failed to initialize encryption")
+
+			}
+
+			upload, err := Manager.CreateS3Manager(
+				config.S3.AccessKey,
+				config.S3.Region,
+				config.S3.Bucket,
+				config.S3.Secret,
+			)
+
+			if err != nil {
+				fmt.Println(err)
+			}
+			upload.Upload(config.S3.UploadDirectory)
+		}
+
 	case "restore":
 		err := Restore.Parse(os.Args[2:])
 		if err != nil {
@@ -102,6 +140,43 @@ func main() {
 
 		log.Println("Restore source directory:", config.Restore.SourceDirectory)
 		log.Println("Restore target directory:", config.Restore.TargetDirectory)
+
+		if *RestoreFromS3 {
+			err := Restore.Parse(os.Args[4:])
+			if err != nil {
+				log.Println("Parsing restore command failed:", err)
+				return
+			}
+			download, err := Manager.CreateS3Manager(
+				config.S3.AccessKey,
+				config.S3.Region,
+				config.S3.Bucket,
+				config.S3.Secret,
+			)
+
+			if err != nil {
+				fmt.Println(err)
+			}
+			download.Download(config.S3.UploadDirectory, *RestoreDate)
+
+			decrypt := Manager.Decrypt{}
+
+			err1 := decrypt.Decrypt(
+				filepath.Join(config.S3.UploadDirectory, "backup.gz.enc"),
+				filepath.Join(config.S3.UploadDirectory, "backup.gz"),
+				"enc_key",
+				1024,
+				config.S3.UploadDirectory,
+				*RestoreDate)
+			if err1 != nil {
+				return
+			}
+
+			if err != nil {
+				log.Println("Failed to initialize decryption")
+
+			}
+		}
 
 		restore, err := Manager.CreateRestoreManager(
 			config.Restore.SourceDirectory,

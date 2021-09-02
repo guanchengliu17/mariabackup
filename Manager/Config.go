@@ -12,6 +12,7 @@ type Config struct {
 	PositionFile      string  `json:"position_file"`
 	Backup            backup  `json:"backup"`
 	Restore           restore `json:"restore"`
+	S3                s3Conf  `json:"s3"`
 	ParallelThreads   int     `json:"parallel_threads"`
 	GzipThreads       int     `json:"compression_threads"`
 	GzipBlockSize     int     `json:"compression_block_size"`
@@ -21,6 +22,15 @@ type restore struct {
 	SourceDirectory string `json:"source_directory"`
 	TargetDirectory string `json:"target_directory"`
 	WorkDirectory   string `json:"work_directory"`
+}
+
+type s3Conf struct {
+	Region              string `json:"region"`
+	AccessKey           string `json:"access_key"`
+	Secret              string `json:"secret"`
+	Bucket              string `json:"bucket"`
+	UploadDirectory     string `json:"upload_directory"`
+	AwsConcurrencyLevel int    `json:"aws_concurrency_level"`
 }
 
 type backup struct {

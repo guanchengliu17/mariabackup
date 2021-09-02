@@ -15,6 +15,7 @@ import (
 const (
 	FullBackupMode        = "full"
 	IncrementalBackupMode = "incremental"
+	AwsConcurrencyLevel   = 16
 )
 
 type BackupManager struct {
@@ -121,7 +122,6 @@ func (b *BackupManager) Backup() error {
 		"--user="+b.username,
 		"--password="+b.password,
 		"--backup",
-		"--version-check",
 		"--datadir="+b.dataDirectory,
 		"--target_dir="+backupPath,
 		"--extra-lsndir="+backupPath,
