@@ -25,6 +25,7 @@ var BackupParallelThreads = Backup.Int("parallel-threads", 0, "parallel threads 
 var BackupGzipThreads = Backup.Int("gzip-threads", 0, "gzip number of threads")
 var BackupGzipBlockSize = Backup.Int("gzip-block", 0, "number of bytes gzip processes per cycle")
 var BackupToS3 = Backup.Bool("backup-to-s3", false, "When true upload to S3")
+var BackupEncryptionKey = Backup.String("encryption-key", "", "encryption key location")
 
 //restore command
 var Restore = flag.NewFlagSet("restore", flag.ExitOnError)
@@ -39,6 +40,7 @@ var RestoreGzipThreads = Restore.Int("gzip-threads", 0, "gzip number of threads"
 var RestoreGzipBlockSize = Restore.Int("gzip-block", 0, "number of bytes gzip processes per cycle")
 var RestoreFromS3 = Restore.Bool("restore-from-s3", false, "When true restore from S3")
 var RestoreDate = Restore.String("restore-date", "", "backup creation date from S3, format YYYY-MM-DD")
+var RestoreEncryptionKey = Restore.String("encryption-key", "", "encryption key location")
 
 func main() {
 	log.SetFlags(log.Ldate | log.Ltime)
@@ -101,7 +103,7 @@ func main() {
 			err1 := encrypt.Encrypt(
 				filepath.Join(config.S3.UploadDirectory, "backup.gz"),
 				filepath.Join(config.S3.UploadDirectory, "backup.gz.enc"),
-				"enc_key",
+				*BackupEncryptionKey,
 				1024,
 				config.S3.UploadDirectory,
 			)
@@ -164,7 +166,7 @@ func main() {
 			err1 := decrypt.Decrypt(
 				filepath.Join(config.S3.UploadDirectory, "backup.gz.enc"),
 				filepath.Join(config.S3.UploadDirectory, "backup.gz"),
-				"enc_key",
+				*RestoreEncryptionKey,
 				1024,
 				config.S3.UploadDirectory,
 				*RestoreDate)
