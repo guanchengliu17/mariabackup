@@ -53,7 +53,7 @@ func CreateS3Manager(
 
 func (s *S3Manager) Upload(backup string) {
 
-	files := []string{"backup.gz.enc", "xtrabackup_info", "xtrabackup_checkpoints"}
+	files := []string{"backup.gz.enc", "xtrabackup_info", "xtrabackup_checkpoints", "checksum"}
 
 	for i := range files {
 		ulp := &UploadProgress{}
@@ -77,7 +77,7 @@ func (s *S3Manager) Download(backup string, restoreDate string) {
 	if s.IsPushed(GenerateDownloadS3Path("backup.gz.enc", restoreDate)) == false {
 	}
 
-	files := []string{"backup.gz.enc", "xtrabackup_info", "xtrabackup_checkpoints"}
+	files := []string{"backup.gz.enc", "xtrabackup_info", "xtrabackup_checkpoints", "checksum"}
 
 	if _, err := os.Stat(backup); os.IsNotExist(err) {
 		err := os.Mkdir(backup, 0755)

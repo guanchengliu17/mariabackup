@@ -31,7 +31,6 @@ type s3Conf struct {
 	Bucket              string `json:"bucket"`
 	UploadDirectory     string `json:"upload_directory"`
 	AwsConcurrencyLevel int    `json:"aws_concurrency_level"`
-	ChecksumDir         string `json:"checksum_dir"`
 }
 
 type backup struct {

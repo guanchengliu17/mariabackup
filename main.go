@@ -103,7 +103,7 @@ func main() {
 				filepath.Join(config.S3.UploadDirectory, "backup.gz.enc"),
 				"enc_key",
 				1024,
-				config.S3.ChecksumDir,
+				config.S3.UploadDirectory,
 			)
 
 			if err1 != nil {
@@ -166,7 +166,7 @@ func main() {
 				filepath.Join(config.S3.UploadDirectory, "backup.gz"),
 				"enc_key",
 				1024,
-				config.S3.ChecksumDir,
+				config.S3.UploadDirectory,
 				*RestoreDate)
 			if err1 != nil {
 				return

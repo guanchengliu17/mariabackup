@@ -13,7 +13,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 )
 
 type Encrypt struct {
@@ -104,7 +103,7 @@ func (e *Encrypt) Encrypt(inFile string, outFile string, key string, bufferSize 
 
 func (d *Decrypt) Decrypt(inFile string, outFile string, key string, bufferSize int64, checksumDir string, date string) error {
 
-	if !ValidateChecksum(CalculateChecksum(inFile), checksumDir, filepath.Join(checksumDir, date)) {
+	if !ValidateChecksum(CalculateChecksum(inFile), checksumDir, filepath.Join(checksumDir, "checksum")) {
 		log.Fatal("Checksum validation failed! someone has tampered with the backup file!")
 	} else {
 		log.Printf("Checksum validation passed!")
@@ -200,7 +199,6 @@ func CalculateChecksum(file string) (checksum string) {
 
 func WriteChecksumToFile(checksumDir string, checksum string) {
 
-	currentTime := time.Now()
 	// make sure that checksums directory exists
 	if _, err := os.Stat(checksumDir); os.IsNotExist(err) {
 		err := os.Mkdir(checksumDir, 0640)
@@ -210,8 +208,8 @@ func WriteChecksumToFile(checksumDir string, checksum string) {
 	}
 
 	// if file does not exist then create it
-	if _, err := os.Stat(filepath.Join(checksumDir, currentTime.Format("2006-01-02"))); os.IsNotExist(err) {
-		_, err := os.Create(filepath.Join(checksumDir, currentTime.Format("2006-01-02")))
+	if _, err := os.Stat(filepath.Join(checksumDir, "checksum")); os.IsNotExist(err) {
+		_, err := os.Create(filepath.Join(checksumDir, "checksum"))
 		if err != nil {
 			log.Printf("Unable to create checksum file")
 		}
@@ -220,7 +218,7 @@ func WriteChecksumToFile(checksumDir string, checksum string) {
 	}
 
 	f, err := os.OpenFile(
-		filepath.Join(checksumDir, currentTime.Format("2006-01-02")),
+		filepath.Join(checksumDir, "checksum"),
 		os.O_APPEND|os.O_WRONLY|os.O_TRUNC, 0640)
 
 	if err != nil {
@@ -243,7 +241,7 @@ func WriteChecksumToFile(checksumDir string, checksum string) {
 func ValidateChecksum(checksum string, checksumDir string, checksumFile string) (valid bool) {
 
 	if _, err := os.Stat(checksumDir); os.IsNotExist(err) {
-		log.Fatal("Checksum file does not exist")
+		log.Fatal("Checksum directory does not exist")
 		return false
 	}
 
