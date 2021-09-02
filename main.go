@@ -236,7 +236,7 @@ func loadConfig() *Manager.Config {
 			log.Fatalln("Failed to create config file", err)
 		}
 	}
-	err := config.Load("config.json")
+	err := config.Load(configFile)
 
 	if err != nil {
 		log.Fatalln("Failed to read config file: ", err)
